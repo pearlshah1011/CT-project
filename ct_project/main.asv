@@ -1,0 +1,162 @@
+filename = 'project.wav';
+
+% A/D converter
+%x1 = A_D_converter(filename);
+x1=[0
+    0
+    1
+    0 
+    0 
+    1
+    1 
+    1
+    0
+    1
+    1
+    0
+    0
+    0
+    1
+    1];
+
+length_x1 = size(x1);
+
+% Encoder
+x2 = zeros(1, length_x1(1)/2);
+for i = 1:2:length_x1-1
+    bits_pair = x1(i:i+1);
+    x2((i+1)/2) = ask(bits_pair);
+end
+
+% Line Coding
+oversampling_factor = 4;  % Reduced oversampling factor
+m = oversampling_factor;
+a = 0.5;
+length = 10;
+[raised_cosine_filter, dummy] = raised_cosine(a, m, length);
+rect_filter = ones(1, 4);  % Adjusted pulse size
+
+nsymbols = length_x1(1)/2;
+nsymbols_upsampled = 1 + (nsymbols-1) * m;
+symbols_upsampled = zeros(nsymbols_upsampled, 1);
+symbols_upsampled(1:m:end) = x2;
+
+x3_rcos = conv(symbols_upsampled, raised_cosine_filter, 'same');
+x3_rect = conv(symbols_upsampled, rect_filter, 'same');
+len_x3rect=size(x3_rect);
+% Modulation Segment by Segment
+Fs = 1e6;  % Sample rate for final output
+segment_length = 1e6;  % Process 10,000 samples at a time
+x4 = zeros(size(x3_rect));
+% for k = 1:segment_length:len_x3rect(1)
+%     idx = k:min(k + segment_length - 1, len_x3rect(1));
+%     t_segment = (idx-1) / Fs;  % Correct time vector for segment
+%     carrier = cos(2*pi*1e6*t_segment);  % Generate carrier for the current segment
+%     x4(idx) = carrier * x3_rect(idx);  % Ensure both vectors are the same length
+% end
+Tb = 0.25;
+fc = 1;
+segment_length = 10^3  ;
+
+% Assuming x3_rect is defined elsewhere in your code.
+total_samples = len_x3rect(1);
+
+% Initialize an empty array to store the modulated signal
+x4 = [];
+
+for start_idx = 1:segment_length:total_samples
+    % Calculate end index for the current segment
+    end_idx = min(start_idx + segment_length - 1, total_samples);
+
+    % Time vector for the current segment
+    t = (start_idx-1)*Tb:Tb:(end_idx-1)*Tb;
+
+    % Carrier signal for the current segment
+    carrier = cos(2*pi*fc*t)';
+
+    % Segment of x3_rect
+    current_segment = x3_rect(start_idx:end_idx);
+
+    % Modulate the current segment
+    modulated_segment = carrier .* current_segment;
+
+    % Append the modulated segment to the result
+    x4 = [x4; modulated_segment];
+end
+
+EbN0_dB=50;
+
+[y4,noise]=awgn_channel(x4,EbN0_dB,Tb);
+
+disp(noise);
+
+
+y3 = demodulator(y4);
+
+y2 = lineDecoder(y3,rect_filter,m);
+
+y1 = decoder(y2);
+
+
+% disp("Mean Square Error is-");
+% disp(rmse(y1,x1));
+
+% Plotting - Plot segments or downsampled versions to check waveforms
+
+% Assuming you have the data for y1, y2, y3, and y4 correctly computed.
+
+% Plot x1 and y1
+figure;
+subplot(2, 1, 1);
+stem(x1, 'filled');
+title('Original Bits x1');
+xlabel('Sample Index');
+ylabel('Amplitude');
+
+subplot(2, 1, 2);
+stem(y1, 'filled');
+title('Received Bits y1');
+xlabel('Sample Index');
+ylabel('Amplitude');
+
+% Plot x2 and y2
+figure;
+subplot(2, 1, 1);
+stem(x2, 'filled');
+title('Encoded Bits x2');
+xlabel('Sample Index');
+ylabel('Amplitude');
+
+subplot(2, 1, 2);
+stem(y2, 'filled');
+title('Decoded Bits y2');
+xlabel('Sample Index');
+ylabel('Amplitude');
+
+% Plot x3_rect and y3
+figure;
+subplot(2, 1, 1);
+plot(x3_rect);
+title('Line Coded Signal x3\_rect');
+xlabel('Sample Index');
+ylabel('Amplitude');
+
+subplot(2, 1, 2);
+plot(y3);
+title('Received Line Coded Signal y3');
+xlabel('Sample Index');
+ylabel('Amplitude');
+
+% Plot x4 and y4
+figure;
+subplot(2, 1, 1);
+stem(x2);
+title('Modulated Signal x4');
+xlabel('Sample Index');
+ylabel('Amplitude');
+
+subplot(2, 1, 2);
+stem(y4);
+title('Received Modulated Signal y4');
+xlabel('Sample Index');
+ylabel('Amplitude');
